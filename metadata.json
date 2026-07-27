@@ -1,0 +1,11 @@
+{
+  "name": "Inmobiliaria CAMBIOS de aire - Asistencia",
+  "description": "Sistema de asistencia con escáner QR de cámara, registro de entrada/salida en tiempo real, geolocalización y panel admin.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
