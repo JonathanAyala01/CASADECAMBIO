@@ -66,6 +66,7 @@ export default function App() {
     location?: { latitude: number; longitude: number; accuracy: number; address?: string };
     method?: 'QR Cámara' | 'Código PIN' | 'Manual Admin';
     notes?: string;
+    deviceId?: string;
   }) => {
     const result = await recordClockIn(payload);
     // Refresh local records state immediately
@@ -80,6 +81,7 @@ export default function App() {
     location?: { latitude: number; longitude: number; accuracy: number; address?: string };
     method?: 'QR Cámara' | 'Código PIN' | 'Manual Admin';
     notes?: string;
+    deviceId?: string;
   }) => {
     const result = await recordClockOut(payload);
     await loadData();

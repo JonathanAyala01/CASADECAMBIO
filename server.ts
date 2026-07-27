@@ -3,18 +3,46 @@ import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import { INITIAL_EMPLOYEES, INITIAL_BRANCHES, generateInitialAttendanceRecords } from './src/mockData';
-import { Employee, AttendanceRecord, BranchLocation, WeeklyReportSummary, WeeklyEmployeePunctuality } from './src/types';
+import { Employee, AttendanceRecord, BranchLocation, WeeklyReportSummary, WeeklyEmployeePunctuality, PaymentRequest } from './src/types';
 
 // In-Memory Database store with pre-populated data
 let employeesStore: Employee[] = [...INITIAL_EMPLOYEES];
 let attendanceStore: AttendanceRecord[] = generateInitialAttendanceRecords();
 let branchesStore: BranchLocation[] = [...INITIAL_BRANCHES];
+let paymentRequestsStore: PaymentRequest[] = [
+  {
+    id: 'req-101',
+    employeeId: 'emp-102',
+    employeeName: 'Mariana Gómez',
+    employeeCode: 'CAMBIO-102',
+    type: 'adelanto',
+    amount: 15000,
+    reason: 'Arreglo urgente de heladera',
+    status: 'approved',
+    requestedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+    resolvedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000 + 4 * 3600 * 1000).toISOString(),
+    receiptUrl: 'https://images.unsplash.com/photo-1554415707-6e8cfc93fe23?auto=format&fit=crop&q=80&w=600',
+    notes: 'Aprobado y transferido por administración'
+  },
+  {
+    id: 'req-102',
+    employeeId: 'emp-103',
+    employeeName: 'Lucas Peralta',
+    employeeCode: 'CAMBIO-103',
+    type: 'comision',
+    amount: 45000,
+    reason: 'Comisión por reserva depto 2 amb Recoleta',
+    status: 'pending',
+    requestedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString()
+  }
+];
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
   // Initialize Gemini AI Client
   const ai = new GoogleGenAI({
@@ -120,6 +148,14 @@ async function startServer() {
       qrCodeData: `CAMBIO-${nextNum}|${data.name}|${data.role}`,
       createdAt: new Date().toISOString().split('T')[0],
       avatarUrl: data.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=250',
+      
+      // Legajo fields
+      hireDate: data.hireDate || new Date().toISOString().split('T')[0],
+      paymentFrequency: data.paymentFrequency || 'Mensual',
+      dni: data.dni || '',
+      birthDate: data.birthDate || '',
+      residence: data.residence || '',
+      profession: data.profession || '',
     };
 
     employeesStore.unshift(newEmployee);
@@ -134,6 +170,105 @@ async function startServer() {
       return res.json({ success: true, message: 'Empleado desactivado correctamente' });
     }
     res.status(404).json({ error: 'Empleado no encontrado' });
+  });
+
+  // Device Lock & Anti-Fraud Endpoints
+  app.post('/api/employees/device-request', (req, res) => {
+    const { employeeId, deviceId, deviceName, deviceUserAgent } = req.body;
+    if (!employeeId || !deviceId) {
+      return res.status(400).json({ error: 'Empleado e ID de dispositivo son requeridos' });
+    }
+
+    const employee = employeesStore.find(
+      (e) => e.id === employeeId || e.code.toUpperCase() === employeeId.toUpperCase()
+    );
+
+    if (!employee) {
+      return res.status(404).json({ error: 'Empleado no encontrado' });
+    }
+
+    const nowStr = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    employee.deviceStatus = 'pending';
+    employee.devicePendingId = deviceId;
+    employee.devicePendingName = deviceName || 'Teléfono Móvil';
+    employee.devicePendingUserAgent = deviceUserAgent || '';
+    employee.devicePendingRequestedAt = nowStr;
+
+    res.json({
+      success: true,
+      message: `Solicitud de vinculación enviada al Administrador para ${employee.name}`,
+      employee,
+    });
+  });
+
+  app.post('/api/employees/approve-device', (req, res) => {
+    const { employeeId } = req.body;
+    const employee = employeesStore.find((e) => e.id === employeeId);
+    if (!employee) {
+      return res.status(404).json({ error: 'Empleado no encontrado' });
+    }
+
+    const nowStr = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    employee.deviceId = employee.devicePendingId || employee.deviceId || `dev-${Date.now()}`;
+    employee.deviceName = employee.devicePendingName || employee.deviceName || 'Teléfono Autorizado';
+    employee.deviceUserAgent = employee.devicePendingUserAgent || employee.deviceUserAgent;
+    employee.deviceRegisteredAt = nowStr;
+    employee.deviceStatus = 'authorized';
+
+    delete employee.devicePendingId;
+    delete employee.devicePendingName;
+    delete employee.devicePendingUserAgent;
+    delete employee.devicePendingRequestedAt;
+
+    res.json({
+      success: true,
+      message: `Dispositivo ${employee.deviceName} APROBADO correctamente para ${employee.name}`,
+      employee,
+    });
+  });
+
+  app.post('/api/employees/reset-device', (req, res) => {
+    const { employeeId } = req.body;
+    const employee = employeesStore.find((e) => e.id === employeeId);
+    if (!employee) {
+      return res.status(404).json({ error: 'Empleado no encontrado' });
+    }
+
+    delete employee.deviceId;
+    delete employee.deviceName;
+    delete employee.deviceUserAgent;
+    delete employee.deviceRegisteredAt;
+    delete employee.devicePendingId;
+    delete employee.devicePendingName;
+    delete employee.devicePendingUserAgent;
+    delete employee.devicePendingRequestedAt;
+    employee.deviceStatus = 'unregistered';
+
+    res.json({
+      success: true,
+      message: `Dispositivo desvinculado correctamente. ${employee.name} puede registrar un nuevo teléfono.`,
+      employee,
+    });
+  });
+
+  app.post('/api/employees/reject-device', (req, res) => {
+    const { employeeId } = req.body;
+    const employee = employeesStore.find((e) => e.id === employeeId);
+    if (!employee) {
+      return res.status(404).json({ error: 'Empleado no encontrado' });
+    }
+
+    delete employee.devicePendingId;
+    delete employee.devicePendingName;
+    delete employee.devicePendingUserAgent;
+    delete employee.devicePendingRequestedAt;
+    employee.deviceStatus = 'rejected';
+
+    res.json({
+      success: true,
+      message: `Solicitud de dispositivo rechazada para ${employee.name}`,
+      employee,
+    });
   });
 
   // 3. Attendance Records API
@@ -159,7 +294,7 @@ async function startServer() {
 
   // Clock In (Ingreso)
   app.post('/api/attendance/clock-in', (req, res) => {
-    const { employeeCodeOrId, branch, location, method, notes, selfiePhotoUrl, distanceFromBranchMeters, securityFlags } = req.body;
+    const { employeeCodeOrId, branch, location, method, notes, selfiePhotoUrl, distanceFromBranchMeters, securityFlags, deviceId } = req.body;
 
     if (!employeeCodeOrId) {
       return res.status(400).json({ error: 'Código o ID de empleado no proporcionado' });
@@ -175,6 +310,19 @@ async function startServer() {
 
     if (!employee.active) {
       return res.status(400).json({ error: 'El empleado se encuentra inactivo' });
+    }
+
+    // Verify Device Lock Enforcement (1 phone per employee)
+    if (deviceId && employee.deviceStatus === 'authorized' && employee.deviceId && employee.deviceId !== deviceId) {
+      return res.status(403).json({
+        error: `Acceso denegado: Dispositivo no autorizado. El empleado ${employee.name} tiene registrado el teléfono "${employee.deviceName}". No se permite fichar desde otro teléfono.`,
+      });
+    }
+
+    if (employee.deviceStatus === 'pending') {
+      return res.status(403).json({
+        error: `Acceso restringido: La solicitud de vinculación del teléfono de ${employee.name} está PENDIENTE de aprobación por el Administrador.`,
+      });
     }
 
     const now = new Date();
@@ -254,7 +402,7 @@ async function startServer() {
 
   // Clock Out (Salida)
   app.post('/api/attendance/clock-out', (req, res) => {
-    const { employeeCodeOrId, branch, location, method, notes, selfiePhotoUrl, distanceFromBranchMeters, securityFlags } = req.body;
+    const { employeeCodeOrId, branch, location, method, notes, selfiePhotoUrl, distanceFromBranchMeters, securityFlags, deviceId } = req.body;
 
     if (!employeeCodeOrId) {
       return res.status(400).json({ error: 'Código o ID de empleado no proporcionado' });
@@ -266,6 +414,12 @@ async function startServer() {
 
     if (!employee) {
       return res.status(404).json({ error: 'Empleado no encontrado con ese código o PIN' });
+    }
+
+    if (deviceId && employee.deviceStatus === 'authorized' && employee.deviceId && employee.deviceId !== deviceId) {
+      return res.status(403).json({
+        error: `Acceso denegado: Dispositivo no autorizado. El empleado ${employee.name} tiene registrado el teléfono "${employee.deviceName}".`,
+      });
     }
 
     const now = new Date();
@@ -444,6 +598,68 @@ Genera un Informe Ejecutivo Breve y Estratégico en español con:
         details: error?.message,
       });
     }
+  });
+
+  // 6. Payment Requests API
+  app.get('/api/payment-requests', (req, res) => {
+    const { employeeId } = req.query;
+    let list = [...paymentRequestsStore];
+    if (employeeId) {
+      list = list.filter((r) => r.employeeId === employeeId);
+    }
+    list.sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime());
+    res.json(list);
+  });
+
+  app.post('/api/payment-requests', (req, res) => {
+    const { employeeId, type, amount, reason } = req.body;
+    if (!employeeId || !type || !amount || !reason) {
+      return res.status(400).json({ error: 'Faltan datos requeridos (empleado, tipo, monto, motivo)' });
+    }
+
+    const employee = employeesStore.find((e) => e.id === employeeId);
+    if (!employee) {
+      return res.status(404).json({ error: 'Empleado no encontrado' });
+    }
+
+    const newRequest: PaymentRequest = {
+      id: `req-${Date.now()}`,
+      employeeId: employee.id,
+      employeeName: employee.name,
+      employeeCode: employee.code,
+      type,
+      amount: Number(amount),
+      reason,
+      status: 'pending',
+      requestedAt: new Date().toISOString()
+    };
+
+    paymentRequestsStore.unshift(newRequest);
+    res.status(201).json({ success: true, paymentRequest: newRequest });
+  });
+
+  app.post('/api/payment-requests/:id/resolve', (req, res) => {
+    const { id } = req.params;
+    const { status, notes, receiptUrl } = req.body;
+
+    if (!status || !['approved', 'rejected'].includes(status)) {
+      return res.status(400).json({ error: 'Estado de resolución inválido o ausente' });
+    }
+
+    const idx = paymentRequestsStore.findIndex((r) => r.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ error: 'Solicitud de pago no encontrada' });
+    }
+
+    paymentRequestsStore[idx] = {
+      ...paymentRequestsStore[idx],
+      status,
+      notes: notes || '',
+      receiptUrl: receiptUrl || paymentRequestsStore[idx].receiptUrl,
+      resolvedAt: new Date().toISOString()
+    };
+
+    res.json({ success: true, paymentRequest: paymentRequestsStore[idx] });
   });
 
   // Vite Middleware integration for dev or Static Files for prod

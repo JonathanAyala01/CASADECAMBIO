@@ -18,6 +18,42 @@ export interface Employee {
   avatarUrl?: string;
   qrCodeData: string;
   createdAt: string;
+
+  // Legajo y datos de ingreso
+  hireDate?: string;
+  paymentFrequency?: string;
+
+  // Datos personales
+  dni?: string;
+  birthDate?: string;
+  residence?: string;
+  profession?: string;
+
+  // Device Lock & Anti-Fraud Security
+  deviceId?: string; // Authorized device UUID
+  deviceStatus?: 'authorized' | 'pending' | 'unregistered' | 'rejected';
+  deviceName?: string; // Friendly name e.g. "Samsung Galaxy S23 (Chrome)"
+  deviceUserAgent?: string;
+  deviceRegisteredAt?: string;
+  devicePendingId?: string; // Pending device ID waiting for admin approval
+  devicePendingName?: string;
+  devicePendingUserAgent?: string;
+  devicePendingRequestedAt?: string;
+}
+
+export interface PaymentRequest {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  employeeCode: string;
+  type: 'adelanto' | 'comision';
+  amount: number;
+  reason: string;
+  status: 'pending' | 'approved' | 'rejected';
+  requestedAt: string; // ISO String
+  resolvedAt?: string; // ISO String
+  receiptUrl?: string; // Base64 or image URL
+  notes?: string;
 }
 
 export type AttendanceType = 'entry' | 'exit';

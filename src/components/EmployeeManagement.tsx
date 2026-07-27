@@ -12,10 +12,17 @@ import {
   Phone, 
   Mail, 
   Keyboard,
-  QrCode
+  QrCode,
+  Smartphone,
+  ShieldCheck,
+  RefreshCw,
+  AlertCircle,
+  CheckCircle2,
+  XCircle,
+  Lock
 } from 'lucide-react';
 import { Employee, EmployeeRole, ShiftType, BranchLocation } from '../types';
-import { saveEmployee } from '../services/api';
+import { saveEmployee, approveDevicePairing, resetDevicePairing, rejectDevicePairing } from '../services/api';
 import { QRBadgeGenerator } from './QRBadgeGenerator';
 
 interface EmployeeManagementProps {
@@ -32,6 +39,7 @@ export const EmployeeManagement: React.FC<EmployeeManagementProps> = ({
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [selectedBadgeEmp, setSelectedBadgeEmp] = useState<Employee | null>(null);
+  const [deviceActionLoading, setDeviceActionLoading] = useState<string | null>(null);
 
   // Form fields
   const [name, setName] = useState<string>('');
@@ -44,8 +52,57 @@ export const EmployeeManagement: React.FC<EmployeeManagementProps> = ({
   const [phone, setPhone] = useState<string>('');
   const [pin, setPin] = useState<string>('1234');
 
+  // New Legajo and Personal Fields
+  const [hireDate, setHireDate] = useState<string>('');
+  const [paymentFrequency, setPaymentFrequency] = useState<string>('Mensual');
+  const [dni, setDni] = useState<string>('');
+  const [birthDate, setBirthDate] = useState<string>('');
+  const [residence, setResidence] = useState<string>('');
+  const [profession, setProfession] = useState<string>('');
+
   const [saving, setSaving] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const pendingDeviceEmployees = employees.filter(e => e.deviceStatus === 'pending' || !!e.devicePendingId);
+
+  const handleApproveDevice = async (employeeId: string) => {
+    setDeviceActionLoading(employeeId);
+    try {
+      await approveDevicePairing(employeeId);
+      onRefresh();
+    } catch (err: any) {
+      alert(err.message || 'Error al aprobar dispositivo');
+    } finally {
+      setDeviceActionLoading(null);
+    }
+  };
+
+  const handleResetDevice = async (employeeId: string, empName: string) => {
+    if (!window.confirm(`¿Está seguro de desvincular el teléfono de ${empName}? El empleado podrá registrar un nuevo dispositivo.`)) {
+      return;
+    }
+    setDeviceActionLoading(employeeId);
+    try {
+      await resetDevicePairing(employeeId);
+      onRefresh();
+    } catch (err: any) {
+      alert(err.message || 'Error al desvincular dispositivo');
+    } finally {
+      setDeviceActionLoading(null);
+    }
+  };
+
+  const handleRejectDevice = async (employeeId: string) => {
+    setDeviceActionLoading(employeeId);
+    try {
+      await rejectDevicePairing(employeeId);
+      onRefresh();
+    } catch (err: any) {
+      alert(err.message || 'Error al rechazar solicitud');
+    } finally {
+      setDeviceActionLoading(null);
+    }
+  };
 
   const resetForm = () => {
     setName('');
@@ -57,6 +114,15 @@ export const EmployeeManagement: React.FC<EmployeeManagementProps> = ({
     setEmail('');
     setPhone('');
     setPin(String(Math.floor(1000 + Math.random() * 9000)));
+    
+    // Reset legajo fields
+    setHireDate(new Date().toISOString().split('T')[0]);
+    setPaymentFrequency('Mensual');
+    setDni('');
+    setBirthDate('');
+    setResidence('');
+    setProfession('');
+    
     setErrorMsg(null);
   };
 
@@ -77,6 +143,15 @@ export const EmployeeManagement: React.FC<EmployeeManagementProps> = ({
     setEmail(emp.email);
     setPhone(emp.phone);
     setPin(emp.pin);
+    
+    // Load legajo fields
+    setHireDate(emp.hireDate || new Date().toISOString().split('T')[0]);
+    setPaymentFrequency(emp.paymentFrequency || 'Mensual');
+    setDni(emp.dni || '');
+    setBirthDate(emp.birthDate || '');
+    setResidence(emp.residence || '');
+    setProfession(emp.profession || '');
+    
     setErrorMsg(null);
     setShowAddModal(true);
   };
@@ -103,6 +178,14 @@ export const EmployeeManagement: React.FC<EmployeeManagementProps> = ({
         email: email.trim(),
         phone: phone.trim(),
         pin,
+        
+        // Pass legajo fields
+        hireDate,
+        paymentFrequency,
+        dni: dni.trim(),
+        birthDate,
+        residence: residence.trim(),
+        profession: profession.trim(),
       });
 
       setShowAddModal(false);
@@ -118,11 +201,80 @@ export const EmployeeManagement: React.FC<EmployeeManagementProps> = ({
   return (
     <div className="space-y-4">
       
+      {/* Pending Device Authorization Requests Banner */}
+      {pendingDeviceEmployees.length > 0 && (
+        <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 shadow-md space-y-3">
+          <div className="flex items-center justify-between border-b border-amber-200 pb-2">
+            <div className="flex items-center space-x-2 text-amber-900 font-extrabold text-sm">
+              <Smartphone className="w-5 h-5 text-amber-600 animate-pulse" />
+              <span>Solicitudes de Vinculación de Teléfono Pendientes ({pendingDeviceEmployees.length})</span>
+            </div>
+            <span className="bg-amber-200 text-amber-900 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase">
+              Requiere Aprobación Admin
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {pendingDeviceEmployees.map((emp) => (
+              <div key={emp.id} className="bg-white p-3.5 rounded-xl border border-amber-200 shadow-sm flex flex-col justify-between gap-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center space-x-3">
+                    <img
+                      src={emp.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=250'}
+                      alt={emp.name}
+                      className="w-10 h-10 rounded-xl object-cover ring-2 ring-amber-400 shrink-0"
+                    />
+                    <div>
+                      <h4 className="font-extrabold text-xs text-slate-900">{emp.name}</h4>
+                      <p className="text-[10px] text-slate-500 font-medium">{emp.role} • {emp.branch}</p>
+                      <span className="text-[10px] font-mono font-bold text-amber-700 block mt-0.5">
+                        {emp.code}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-[11px] space-y-1">
+                  <div className="flex items-center justify-between text-slate-700">
+                    <span className="font-bold">Teléfono Solicitado:</span>
+                    <span className="font-mono font-extrabold text-slate-900">{emp.devicePendingName || 'Teléfono Móvil'}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-slate-500 text-[10px]">
+                    <span>Fecha Solicitud:</span>
+                    <span>{emp.devicePendingRequestedAt || 'Reciente'}</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <button
+                    onClick={() => handleRejectDevice(emp.id)}
+                    disabled={deviceActionLoading === emp.id}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-rose-100 text-rose-700 font-extrabold text-[11px] rounded-xl transition flex items-center gap-1 cursor-pointer"
+                  >
+                    <XCircle className="w-3.5 h-3.5" />
+                    <span>Rechazar</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleApproveDevice(emp.id)}
+                    disabled={deviceActionLoading === emp.id}
+                    className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] rounded-xl shadow transition flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Aprobar Acceso</span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Header Bar */}
       <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h3 className="text-base font-bold text-slate-900">Personal y Empleados</h3>
-          <p className="text-xs text-slate-500">Gestione el nómina de la casa de cambios e inmobiliaria</p>
+          <p className="text-xs text-slate-500">Gestione la nómina y candado de dispositivo único por empleado</p>
         </div>
 
         <button
@@ -143,7 +295,7 @@ export const EmployeeManagement: React.FC<EmployeeManagementProps> = ({
                 <th className="py-3 px-4">Empleado / Código</th>
                 <th className="py-3 px-4">Cargo / Rol</th>
                 <th className="py-3 px-4">Sucursal Asignada</th>
-                <th className="py-3 px-4">Horario Esperado</th>
+                <th className="py-3 px-4">Teléfono Autorizado</th>
                 <th className="py-3 px-4">PIN Acceso</th>
                 <th className="py-3 px-4 text-right">Acciones</th>
               </tr>
@@ -160,22 +312,68 @@ export const EmployeeManagement: React.FC<EmployeeManagementProps> = ({
                         className="w-9 h-9 rounded-full object-cover ring-1 ring-slate-200 shrink-0"
                       />
                       <div>
-                        <strong className="text-slate-900 font-bold block">{emp.name}</strong>
-                        <span className="text-[10px] text-slate-400 font-mono">{emp.code}</span>
+                        <strong className="text-slate-900 font-bold block text-xs">{emp.name}</strong>
+                        <div className="text-[10px] text-slate-400 font-mono flex flex-wrap gap-x-1.5">
+                          <span>{emp.code}</span>
+                          {emp.dni && <span className="text-slate-500 font-medium">| DNI: {emp.dni}</span>}
+                        </div>
                       </div>
                     </div>
                   </td>
 
-                  <td className="py-3.5 px-4 font-medium text-slate-800">
-                    {emp.role}
+                  <td className="py-3.5 px-4 text-slate-800">
+                    <strong className="font-semibold block">{emp.role}</strong>
+                    {emp.profession && (
+                      <span className="text-[10px] text-slate-500 block">Prof: {emp.profession}</span>
+                    )}
                   </td>
 
                   <td className="py-3.5 px-4 text-slate-600">
-                    {emp.branch}
+                    <strong className="font-semibold text-slate-700 block">{emp.branch}</strong>
+                    {(emp.hireDate || emp.paymentFrequency) && (
+                      <div className="text-[10px] text-slate-400 mt-0.5">
+                        {emp.hireDate && <span>Ingreso: {emp.hireDate} </span>}
+                        {emp.paymentFrequency && <span>• Cobro: {emp.paymentFrequency}</span>}
+                      </div>
+                    )}
                   </td>
 
-                  <td className="py-3.5 px-4 font-mono font-semibold text-slate-800">
-                    {emp.expectedStartTime} - {emp.expectedEndTime}
+                  {/* Device Status & Binding */}
+                  <td className="py-3.5 px-4">
+                    {emp.deviceStatus === 'authorized' && emp.deviceName ? (
+                      <div className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-900 border border-emerald-200 px-2.5 py-1 rounded-xl text-[11px] font-extrabold">
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span className="truncate max-w-[140px]" title={emp.deviceName}>{emp.deviceName}</span>
+                        <button
+                          onClick={() => handleResetDevice(emp.id, emp.name)}
+                          disabled={deviceActionLoading === emp.id}
+                          className="ml-1 text-slate-400 hover:text-rose-600 p-0.5 rounded transition cursor-pointer"
+                          title="Desvincular teléfono (Permite registrar otro)"
+                        >
+                          <RefreshCw className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ) : emp.deviceStatus === 'pending' || emp.devicePendingId ? (
+                      <div className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-900 border border-amber-300 px-2.5 py-1 rounded-xl text-[11px] font-extrabold">
+                        <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 animate-pulse" />
+                        <span className="truncate max-w-[120px]" title={emp.devicePendingName}>
+                          Pendiente: {emp.devicePendingName || 'Teléfono'}
+                        </span>
+                        <button
+                          onClick={() => handleApproveDevice(emp.id)}
+                          disabled={deviceActionLoading === emp.id}
+                          className="ml-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] px-1.5 py-0.5 rounded-lg transition cursor-pointer"
+                          title="Aprobar Dispositivo"
+                        >
+                          Aprobar
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-500 border border-slate-200 px-2 py-0.5 rounded-lg text-[10px] font-bold">
+                        <Smartphone className="w-3 h-3" />
+                        <span>Sin Vincular</span>
+                      </span>
+                    )}
                   </td>
 
                   <td className="py-3.5 px-4">
@@ -319,6 +517,87 @@ export const EmployeeManagement: React.FC<EmployeeManagementProps> = ({
                     placeholder="+54 9 11 0000-0000"
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   />
+                </div>
+              </div>
+
+              {/* Sección Legajo y Datos Personales */}
+              <div className="border-t border-slate-200 pt-3 space-y-3">
+                <h4 className="font-extrabold text-slate-800 text-[11px] uppercase tracking-wider">Datos de Legajo e Ingreso</h4>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Fecha de Ingreso</label>
+                    <input
+                      type="date"
+                      value={hireDate}
+                      onChange={(e) => setHireDate(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Frecuencia de Cobro</label>
+                    <select
+                      value={paymentFrequency}
+                      onChange={(e) => setPaymentFrequency(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    >
+                      <option value="Mensual">Mensual</option>
+                      <option value="Quincenal">Quincenal</option>
+                      <option value="Semanal">Semanal</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-slate-200 pt-3 space-y-3">
+                <h4 className="font-extrabold text-slate-800 text-[11px] uppercase tracking-wider">Datos Personales del Legajo</h4>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">DNI</label>
+                    <input
+                      type="text"
+                      value={dni}
+                      onChange={(e) => setDni(e.target.value)}
+                      placeholder="Ej. 38.123.456"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Fecha de Nacimiento</label>
+                    <input
+                      type="date"
+                      value={birthDate}
+                      onChange={(e) => setBirthDate(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Profesión</label>
+                    <input
+                      type="text"
+                      value={profession}
+                      onChange={(e) => setProfession(e.target.value)}
+                      placeholder="Ej. Asesor Inmobiliario"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Lugar de Residencia</label>
+                    <input
+                      type="text"
+                      value={residence}
+                      onChange={(e) => setResidence(e.target.value)}
+                      placeholder="Ej. Av. Santa Fe 1234, CABA"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    />
+                  </div>
                 </div>
               </div>
 

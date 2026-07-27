@@ -427,7 +427,6 @@ export const AttendanceLogTable: React.FC<AttendanceLogTableProps> = ({
               <thead>
                 <tr className="bg-slate-900 text-white text-[11px] font-semibold uppercase tracking-wider border-b border-slate-800">
                   <th className="py-3 px-4">Empleado / Cargo</th>
-                  <th className="py-3 px-4">Auditoría de Identidad (Selfie)</th>
                   <th className="py-3 px-4">Sucursal</th>
                   <th className="py-3 px-4">Tipo Marcaje</th>
                   <th className="py-3 px-4">Fecha y Hora</th>
@@ -440,7 +439,7 @@ export const AttendanceLogTable: React.FC<AttendanceLogTableProps> = ({
               <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
                 {filteredRecords.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-8 text-center text-slate-400">
+                    <td colSpan={7} className="py-8 text-center text-slate-400">
                       No se encontraron registros de asistencia para los filtros seleccionados.
                     </td>
                   </tr>
@@ -457,30 +456,6 @@ export const AttendanceLogTable: React.FC<AttendanceLogTableProps> = ({
                           <div>
                             <strong className="text-slate-900 block font-semibold">{r.employeeName}</strong>
                             <span className="text-[10px] text-slate-400 font-mono">{r.employeeCode}</span>
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Anti-Proxy Selfie Photo Audit */}
-                      <td className="py-3 px-4">
-                        <div className="flex items-center space-x-2">
-                          <div className="relative group cursor-pointer" onClick={() => setMapModalRecord(r)}>
-                            <img
-                              src={r.selfiePhotoUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=250'}
-                              alt={`Foto de ${r.employeeName}`}
-                              className="w-9 h-9 rounded-lg object-cover ring-2 ring-emerald-500/30 group-hover:scale-110 transition shadow-sm"
-                            />
-                            <span className="absolute -bottom-1 -right-1 bg-emerald-600 text-white p-0.5 rounded-full ring-2 ring-white">
-                              <CheckCircle2 className="w-2.5 h-2.5" />
-                            </span>
-                          </div>
-                          <div className="text-[10px] space-y-0.5">
-                            <span className="font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 block truncate max-w-[110px]">
-                              Rostro Validado
-                            </span>
-                            <span className="text-slate-400 block font-mono">
-                              {r.distanceFromBranchMeters ? `GPS: ${r.distanceFromBranchMeters}m` : 'GPS: 12m'}
-                            </span>
                           </div>
                         </div>
                       </td>
@@ -847,24 +822,6 @@ export const AttendanceLogTable: React.FC<AttendanceLogTableProps> = ({
 
             <div className="p-5 space-y-4">
               
-              {/* Selfie Photo Identity Audit Card */}
-              <div className="flex items-center gap-4 bg-slate-900 text-white p-3.5 rounded-2xl border border-slate-800">
-                <img
-                  src={mapModalRecord.selfiePhotoUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=250'}
-                  alt={`Selfie ${mapModalRecord.employeeName}`}
-                  className="w-16 h-16 rounded-xl object-cover ring-2 ring-emerald-400 shrink-0"
-                />
-                <div className="space-y-1 text-xs">
-                  <div className="flex items-center gap-1.5 text-emerald-400 font-bold uppercase tracking-wider text-[10px]">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Captura Facial Antifraude Auditada
-                  </div>
-                  <div className="font-bold text-white text-sm">{mapModalRecord.employeeName}</div>
-                  <div className="text-slate-300 font-mono text-[11px]">
-                    Método: <strong className="text-emerald-300">{mapModalRecord.method}</strong> • Distancia GPS: <strong className="text-emerald-300">{mapModalRecord.distanceFromBranchMeters || 12}m</strong>
-                  </div>
-                </div>
-              </div>
-
               <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1.5 text-xs text-slate-700">
                 <div>
                   <strong>Empleado:</strong> {mapModalRecord.employeeName} ({mapModalRecord.employeeCode})

@@ -1,4 +1,4 @@
-import { Employee, AttendanceRecord, BranchLocation, WeeklyReportSummary } from '../types';
+import { Employee, AttendanceRecord, BranchLocation, WeeklyReportSummary, PaymentRequest } from '../types';
 
 export const fetchBranches = async (): Promise<BranchLocation[]> => {
   try {
@@ -82,6 +82,7 @@ export const recordClockIn = async (payload: {
   location?: { latitude: number; longitude: number; accuracy: number; address?: string };
   method?: 'QR Cámara' | 'Código PIN' | 'Manual Admin';
   notes?: string;
+  deviceId?: string;
 }): Promise<{ success: boolean; message: string; record: AttendanceRecord; employee: Employee }> => {
   const res = await fetch('/api/attendance/clock-in', {
     method: 'POST',
@@ -102,6 +103,7 @@ export const recordClockOut = async (payload: {
   location?: { latitude: number; longitude: number; accuracy: number; address?: string };
   method?: 'QR Cámara' | 'Código PIN' | 'Manual Admin';
   notes?: string;
+  deviceId?: string;
 }): Promise<{ success: boolean; message: string; record: AttendanceRecord; employee: Employee; shiftDurationFormatted: string }> => {
   const res = await fetch('/api/attendance/clock-out', {
     method: 'POST',
@@ -114,6 +116,56 @@ export const recordClockOut = async (payload: {
     throw new Error(data.error || 'Error al registrar salida');
   }
   return data;
+};
+
+// --- Device Authorization API ---
+export const requestDevicePairing = async (payload: {
+  employeeId: string;
+  deviceId: string;
+  deviceName: string;
+  deviceUserAgent?: string;
+}): Promise<Employee> => {
+  const res = await fetch('/api/employees/device-request', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Error al solicitar vinculación de dispositivo');
+  return data.employee;
+};
+
+export const approveDevicePairing = async (employeeId: string): Promise<Employee> => {
+  const res = await fetch('/api/employees/approve-device', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ employeeId }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Error al aprobar dispositivo');
+  return data.employee;
+};
+
+export const resetDevicePairing = async (employeeId: string): Promise<Employee> => {
+  const res = await fetch('/api/employees/reset-device', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ employeeId }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Error al desvincular dispositivo');
+  return data.employee;
+};
+
+export const rejectDevicePairing = async (employeeId: string): Promise<Employee> => {
+  const res = await fetch('/api/employees/reject-device', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ employeeId }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Error al rechazar solicitud');
+  return data.employee;
 };
 
 export const fetchWeeklyReport = async (): Promise<WeeklyReportSummary> => {
@@ -133,4 +185,46 @@ export const generateAIPunctualitySummary = async (): Promise<string> => {
   }
   const data = await res.json();
   return data.summary;
+};
+
+export const fetchPaymentRequests = async (employeeId?: string): Promise<PaymentRequest[]> => {
+  try {
+    const url = employeeId ? `/api/payment-requests?employeeId=${employeeId}` : '/api/payment-requests';
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Error al cargar solicitudes de pago');
+    return await res.json();
+  } catch (e) {
+    console.warn('Error fetching payment requests:', e);
+    return [];
+  }
+};
+
+export const createPaymentRequest = async (payload: {
+  employeeId: string;
+  type: 'adelanto' | 'comision';
+  amount: number;
+  reason: string;
+}): Promise<PaymentRequest> => {
+  const res = await fetch('/api/payment-requests', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Error al crear solicitud de pago');
+  return data.paymentRequest;
+};
+
+export const resolvePaymentRequest = async (
+  id: string,
+  payload: { status: 'approved' | 'rejected'; notes?: string; receiptUrl?: string }
+): Promise<PaymentRequest> => {
+  const res = await fetch(`/api/payment-requests/${id}/resolve`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Error al resolver la solicitud de pago');
+  return data.paymentRequest;
 };

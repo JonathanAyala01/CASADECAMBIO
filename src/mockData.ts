@@ -47,7 +47,17 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     active: true,
     avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250',
     qrCodeData: 'CAMBIO-101|Carlos Benítez|Supervisor',
-    createdAt: '2025-01-15'
+    createdAt: '2025-01-15',
+    deviceStatus: 'authorized',
+    deviceId: 'device-carlos-101',
+    deviceName: 'iPhone 15 Pro (Safari)',
+    deviceRegisteredAt: '2026-07-20 10:00',
+    hireDate: '2025-01-15',
+    paymentFrequency: 'Mensual',
+    dni: '35.489.122',
+    birthDate: '1989-04-12',
+    residence: 'Av. Corrientes 1420, CABA',
+    profession: 'Contador Público',
   },
   {
     id: 'emp-102',
@@ -64,7 +74,17 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     active: true,
     avatarUrl: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&q=80&w=250',
     qrCodeData: 'CAMBIO-102|Mariana Gómez|Cajero',
-    createdAt: '2025-02-01'
+    createdAt: '2025-02-01',
+    deviceStatus: 'pending',
+    devicePendingId: 'device-mariana-req',
+    devicePendingName: 'Samsung Galaxy A54 (Chrome Mobile)',
+    devicePendingRequestedAt: '2026-07-27 09:15',
+    hireDate: '2025-02-01',
+    paymentFrequency: 'Quincenal',
+    dni: '38.512.890',
+    birthDate: '1994-08-23',
+    residence: 'Paraguay 2540, CABA',
+    profession: 'Cajera Liquidadora',
   },
   {
     id: 'emp-103',
@@ -81,7 +101,13 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     active: true,
     avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=250',
     qrCodeData: 'CAMBIO-103|Lucas Peralta|Asesor',
-    createdAt: '2025-03-10'
+    createdAt: '2025-03-10',
+    hireDate: '2025-03-10',
+    paymentFrequency: 'Mensual',
+    dni: '37.890.411',
+    birthDate: '1992-11-05',
+    residence: 'Juramento 1820, CABA',
+    profession: 'Martillero y Corredor Público',
   },
   {
     id: 'emp-104',
@@ -98,7 +124,13 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     active: true,
     avatarUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=250',
     qrCodeData: 'CAMBIO-104|Sofía Rossi|Cajero',
-    createdAt: '2025-04-05'
+    createdAt: '2025-04-05',
+    hireDate: '2025-04-05',
+    paymentFrequency: 'Semanal',
+    dni: '41.109.988',
+    birthDate: '1998-02-17',
+    residence: 'Av. Santa Fe 3200, CABA',
+    profession: 'Estudiante de Administración',
   },
   {
     id: 'emp-105',
@@ -115,7 +147,13 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     active: true,
     avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=250',
     qrCodeData: 'CAMBIO-105|Gonzalo Martínez|Gerente',
-    createdAt: '2025-01-02'
+    createdAt: '2025-01-02',
+    hireDate: '2025-01-02',
+    paymentFrequency: 'Mensual',
+    dni: '33.217.766',
+    birthDate: '1987-07-29',
+    residence: 'Juana Manso 1200, Puerto Madero',
+    profession: 'Licenciado en Administración de Empresas',
   }
 ];
 
