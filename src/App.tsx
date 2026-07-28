@@ -13,14 +13,7 @@ import {
 } from './services/api';
 
 export default function App() {
-  const getViewFromPath = (): 'portal' | 'terminal' | 'admin' => {
-    const path = window.location.pathname.replace(/\/$/, '');
-    if (path === '/terminal') return 'terminal';
-    if (path === '/admin') return 'admin';
-    return 'portal';
-  };
-
-  const [currentView, setCurrentView] = useState<'portal' | 'terminal' | 'admin'>(getViewFromPath);
+  const [currentView, setCurrentView] = useState<'portal' | 'terminal' | 'admin'>('portal');
   const [selectedBranch, setSelectedBranch] = useState<string>('Todas');
 
   const [branches, setBranches] = useState<BranchLocation[]>([]);
@@ -31,18 +24,6 @@ export default function App() {
   const [lastSyncedTime, setLastSyncedTime] = useState<string>(
     new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   );
-
-  const navigateToView = (view: 'portal' | 'terminal' | 'admin') => {
-    const path = view === 'portal' ? '/empleado' : `/${view}`;
-    window.history.pushState({}, '', path);
-    setCurrentView(view);
-  };
-
-  useEffect(() => {
-    const handlePopState = () => setCurrentView(getViewFromPath());
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
 
   // Load initial data from central server
   const loadData = async () => {
@@ -114,15 +95,13 @@ export default function App() {
     attendanceRecords.filter((r) => r.dateStr === todayStr && r.type === 'entry').map((r) => r.employeeId)
   ).size;
 
-  const isEmployeeApp = currentView === 'portal';
-
   return (
-    <div className={`${isEmployeeApp ? 'min-h-screen bg-[#060e20]' : 'min-h-screen bg-slate-200'} text-slate-900 font-sans flex flex-col selection:bg-emerald-600 selection:text-white`}>
+    <div className="min-h-screen bg-slate-200 text-slate-900 font-sans flex flex-col selection:bg-emerald-600 selection:text-white">
       
       {/* Top Header */}
-      {!isEmployeeApp && <Header
+      <Header
         currentView={currentView}
-        onNavigate={navigateToView}
+        setCurrentView={setCurrentView}
         selectedBranch={selectedBranch}
         setSelectedBranch={setSelectedBranch}
         branches={branches}
@@ -131,10 +110,10 @@ export default function App() {
         lastSyncedTime={lastSyncedTime}
         activeEmployeesCount={activeEmpCount}
         presentTodayCount={presentTodayCount}
-      />}
+      />
 
       {/* Main Container */}
-      <main className={`flex-1 ${isEmployeeApp ? '' : 'pb-12'}`}>
+      <main className="flex-1 pb-12">
         {currentView === 'portal' ? (
           <EmployeePortalApp
             employees={employees}
@@ -164,7 +143,7 @@ export default function App() {
       </main>
 
       {/* Footer */}
-      {!isEmployeeApp && <footer className="bg-slate-300 text-slate-700 py-6 text-center text-xs border-t border-slate-400 shadow-inner">
+      <footer className="bg-slate-300 text-slate-700 py-6 text-center text-xs border-t border-slate-400 shadow-inner">
         <div className="max-w-7xl mx-auto px-4 space-y-1">
           <p className="font-bold text-slate-900">
             Inmobiliaria CAMBIOS de aire &copy; {new Date().getFullYear()} — Sistema de Control de Asistencia y Jornada Laboral
@@ -173,7 +152,7 @@ export default function App() {
             Sincronización en tiempo real con servidor central • Lectura por Cámara QR • Geolocalización GPS Verificada
           </p>
         </div>
-      </footer>}
+      </footer>
 
     </div>
   );

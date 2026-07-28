@@ -3,40 +3,12 @@ import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import { INITIAL_EMPLOYEES, INITIAL_BRANCHES, generateInitialAttendanceRecords } from './src/mockData';
-import { Employee, AttendanceRecord, BranchLocation, WeeklyReportSummary, WeeklyEmployeePunctuality, PaymentRequest, AppNotification } from './src/types';
+import { Employee, AttendanceRecord, BranchLocation, WeeklyReportSummary, WeeklyEmployeePunctuality } from './src/types';
 
 // In-Memory Database store with pre-populated data
 let employeesStore: Employee[] = [...INITIAL_EMPLOYEES];
 let attendanceStore: AttendanceRecord[] = generateInitialAttendanceRecords();
 let branchesStore: BranchLocation[] = [...INITIAL_BRANCHES];
-let paymentRequestsStore: PaymentRequest[] = [
-  {
-    id: 'req-101',
-    employeeId: 'emp-102',
-    employeeName: 'Mariana Gómez',
-    employeeCode: 'CAMBIO-102',
-    type: 'adelanto',
-    amount: 15000,
-    reason: 'Arreglo urgente de heladera',
-    status: 'approved',
-    requestedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-    resolvedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000 + 4 * 3600 * 1000).toISOString(),
-    receiptUrl: 'https://images.unsplash.com/photo-1554415707-6e8cfc93fe23?auto=format&fit=crop&q=80&w=600',
-    notes: 'Aprobado y transferido por administración'
-  },
-  {
-    id: 'req-102',
-    employeeId: 'emp-103',
-    employeeName: 'Lucas Peralta',
-    employeeCode: 'CAMBIO-103',
-    type: 'comision',
-    amount: 45000,
-    reason: 'Comisión por reserva depto 2 amb Recoleta',
-    status: 'pending',
-    requestedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString()
-  }
-];
-let notificationsStore: AppNotification[] = [];
 
 async function startServer() {
   const app = express();
@@ -149,14 +121,6 @@ async function startServer() {
       qrCodeData: `CAMBIO-${nextNum}|${data.name}|${data.role}`,
       createdAt: new Date().toISOString().split('T')[0],
       avatarUrl: data.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=250',
-      
-      // Legajo fields
-      hireDate: data.hireDate || new Date().toISOString().split('T')[0],
-      paymentFrequency: data.paymentFrequency || 'Mensual',
-      dni: data.dni || '',
-      birthDate: data.birthDate || '',
-      residence: data.residence || '',
-      profession: data.profession || '',
     };
 
     employeesStore.unshift(newEmployee);
@@ -599,105 +563,6 @@ Genera un Informe Ejecutivo Breve y Estratégico en español con:
         details: error?.message,
       });
     }
-  });
-
-  // 6. Payment Requests API
-  app.get('/api/payment-requests', (req, res) => {
-    const { employeeId } = req.query;
-    let list = [...paymentRequestsStore];
-    if (employeeId) {
-      list = list.filter((r) => r.employeeId === employeeId);
-    }
-    list.sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime());
-    res.json(list);
-  });
-
-  app.post('/api/payment-requests', (req, res) => {
-    const { employeeId, type, amount, reason } = req.body;
-    if (!employeeId || !type || !amount || !reason) {
-      return res.status(400).json({ error: 'Faltan datos requeridos (empleado, tipo, monto, motivo)' });
-    }
-
-    const employee = employeesStore.find((e) => e.id === employeeId);
-    if (!employee) {
-      return res.status(404).json({ error: 'Empleado no encontrado' });
-    }
-
-    const newRequest: PaymentRequest = {
-      id: `req-${Date.now()}`,
-      employeeId: employee.id,
-      employeeName: employee.name,
-      employeeCode: employee.code,
-      type,
-      amount: Number(amount),
-      reason,
-      status: 'pending',
-      requestedAt: new Date().toISOString()
-    };
-
-    paymentRequestsStore.unshift(newRequest);
-    res.status(201).json({ success: true, paymentRequest: newRequest });
-  });
-
-  app.post('/api/payment-requests/:id/resolve', (req, res) => {
-    const { id } = req.params;
-    const { status, notes, receiptUrl } = req.body;
-
-    if (!status || !['approved', 'rejected'].includes(status)) {
-      return res.status(400).json({ error: 'Estado de resolución inválido o ausente' });
-    }
-
-    const idx = paymentRequestsStore.findIndex((r) => r.id === id);
-    if (idx === -1) {
-      return res.status(404).json({ error: 'Solicitud de pago no encontrada' });
-    }
-
-    paymentRequestsStore[idx] = {
-      ...paymentRequestsStore[idx],
-      status,
-      notes: notes || '',
-      receiptUrl: receiptUrl || paymentRequestsStore[idx].receiptUrl,
-      resolvedAt: new Date().toISOString()
-    };
-
-    res.json({ success: true, paymentRequest: paymentRequestsStore[idx] });
-  });
-
-  // 7. Employee Notifications API
-  app.get('/api/notifications', (req, res) => {
-    const employeeId = typeof req.query.employeeId === 'string' ? req.query.employeeId : undefined;
-    const list = notificationsStore
-      .filter((notification) => !notification.employeeId || notification.employeeId === employeeId)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    res.json(list);
-  });
-
-  app.post('/api/notifications', (req, res) => {
-    const { title, message, type, employeeId } = req.body;
-    if (!title?.trim() || !message?.trim()) {
-      return res.status(400).json({ error: 'Título y mensaje son requeridos' });
-    }
-    if (employeeId && !employeesStore.some((employee) => employee.id === employeeId)) {
-      return res.status(404).json({ error: 'Empleado no encontrado' });
-    }
-
-    const notification: AppNotification = {
-      id: `notification-${Date.now()}`,
-      title: title.trim(),
-      message: message.trim(),
-      type: ['info', 'success', 'warning', 'urgent'].includes(type) ? type : 'info',
-      employeeId: employeeId || undefined,
-      createdAt: new Date().toISOString(),
-    };
-    notificationsStore.unshift(notification);
-    res.status(201).json({ success: true, notification });
-  });
-
-  app.delete('/api/notifications/:id', (req, res) => {
-    const index = notificationsStore.findIndex((notification) => notification.id === req.params.id);
-    if (index === -1) return res.status(404).json({ error: 'Notificación no encontrada' });
-    notificationsStore.splice(index, 1);
-    res.json({ success: true });
   });
 
   // Vite Middleware integration for dev or Static Files for prod

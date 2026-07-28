@@ -1,4 +1,4 @@
-import { Employee, AttendanceRecord, BranchLocation, WeeklyReportSummary, PaymentRequest, AppNotification } from '../types';
+import { Employee, AttendanceRecord, BranchLocation, WeeklyReportSummary } from '../types';
 
 export const fetchBranches = async (): Promise<BranchLocation[]> => {
   try {
@@ -185,75 +185,4 @@ export const generateAIPunctualitySummary = async (): Promise<string> => {
   }
   const data = await res.json();
   return data.summary;
-};
-
-export const fetchPaymentRequests = async (employeeId?: string): Promise<PaymentRequest[]> => {
-  try {
-    const url = employeeId ? `/api/payment-requests?employeeId=${employeeId}` : '/api/payment-requests';
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('Error al cargar solicitudes de pago');
-    return await res.json();
-  } catch (e) {
-    console.warn('Error fetching payment requests:', e);
-    return [];
-  }
-};
-
-export const createPaymentRequest = async (payload: {
-  employeeId: string;
-  type: 'adelanto' | 'comision';
-  amount: number;
-  reason: string;
-}): Promise<PaymentRequest> => {
-  const res = await fetch('/api/payment-requests', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Error al crear solicitud de pago');
-  return data.paymentRequest;
-};
-
-export const resolvePaymentRequest = async (
-  id: string,
-  payload: { status: 'approved' | 'rejected'; notes?: string; receiptUrl?: string }
-): Promise<PaymentRequest> => {
-  const res = await fetch(`/api/payment-requests/${id}/resolve`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Error al resolver la solicitud de pago');
-  return data.paymentRequest;
-};
-
-export const fetchNotifications = async (employeeId?: string): Promise<AppNotification[]> => {
-  const query = employeeId ? `?employeeId=${encodeURIComponent(employeeId)}` : '';
-  const res = await fetch(`/api/notifications${query}`);
-  if (!res.ok) throw new Error('Error al cargar notificaciones');
-  return await res.json();
-};
-
-export const createNotification = async (payload: {
-  title: string;
-  message: string;
-  type: AppNotification['type'];
-  employeeId?: string;
-}): Promise<AppNotification> => {
-  const res = await fetch('/api/notifications', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Error al crear notificación');
-  return data.notification;
-};
-
-export const deleteNotification = async (id: string): Promise<void> => {
-  const res = await fetch(`/api/notifications/${id}`, { method: 'DELETE' });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Error al eliminar notificación');
 };

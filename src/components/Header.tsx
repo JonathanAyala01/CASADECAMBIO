@@ -4,7 +4,7 @@ import { BranchLocation } from '../types';
 
 interface HeaderProps {
   currentView: 'portal' | 'terminal' | 'admin';
-  onNavigate: (view: 'portal' | 'terminal' | 'admin') => void;
+  setCurrentView: (view: 'portal' | 'terminal' | 'admin') => void;
   selectedBranch: string;
   setSelectedBranch: (branch: string) => void;
   branches: BranchLocation[];
@@ -17,7 +17,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({
   currentView,
-  onNavigate,
+  setCurrentView,
   selectedBranch,
   setSelectedBranch,
   branches,
@@ -35,9 +35,12 @@ export const Header: React.FC<HeaderProps> = ({
           
           {/* Logo & Brand Title */}
           <div className="flex items-center space-x-3">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-800 text-white shadow-md sm:h-14 sm:w-14" aria-hidden="true">
-              <Building2 className="h-7 w-7 sm:h-8 sm:w-8" />
-            </div>
+            <img
+              src="/loguito.png"
+              alt="Logo Inmobiliaria CAMBIOS de aire"
+              className="h-12 sm:h-14 w-auto object-contain"
+              referrerPolicy="no-referrer"
+            />
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="font-extrabold text-lg tracking-tight text-slate-900 font-sans">
@@ -90,9 +93,8 @@ export const Header: React.FC<HeaderProps> = ({
         {/* View Switch Navigation Tabs */}
         <div className="flex items-center justify-between py-2 overflow-x-auto no-scrollbar">
           <div className="flex items-center space-x-2">
-            <a
-              href="/empleado"
-              onClick={(event) => { event.preventDefault(); onNavigate('portal'); }}
+            <button
+              onClick={() => setCurrentView('portal')}
               className={`flex items-center gap-2 px-3.5 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all duration-200 cursor-pointer ${
                 currentView === 'portal'
                   ? 'bg-emerald-700 text-white shadow-md ring-1 ring-emerald-600 font-bold'
@@ -104,11 +106,10 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="bg-emerald-900/20 text-[10px] px-1.5 py-0.5 rounded font-bold text-emerald-950 ml-1">
                 Login & Cámara
               </span>
-            </a>
+            </button>
 
-            <a
-              href="/terminal"
-              onClick={(event) => { event.preventDefault(); onNavigate('terminal'); }}
+            <button
+              onClick={() => setCurrentView('terminal')}
               className={`flex items-center gap-2 px-3.5 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all duration-200 cursor-pointer ${
                 currentView === 'terminal'
                   ? 'bg-emerald-800 text-white shadow-md ring-1 ring-emerald-700 font-bold'
@@ -120,11 +121,10 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="bg-emerald-800/20 text-emerald-950 text-[10px] px-1.5 py-0.5 rounded font-bold ml-1">
                 Pantalla Sucursal
               </span>
-            </a>
+            </button>
 
-            <a
-              href="/admin"
-              onClick={(event) => { event.preventDefault(); onNavigate('admin'); }}
+            <button
+              onClick={() => setCurrentView('admin')}
               className={`flex items-center gap-2 px-3.5 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all duration-200 cursor-pointer ${
                 currentView === 'admin'
                   ? 'bg-slate-800 text-white shadow-md ring-1 ring-slate-700 font-bold'
@@ -136,7 +136,7 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="bg-emerald-800/20 text-emerald-950 text-[10px] px-1.5 py-0.5 rounded font-bold ml-1">
                 Gestión
               </span>
-            </a>
+            </button>
           </div>
 
           {/* Quick Stats Pill */}

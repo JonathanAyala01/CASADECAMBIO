@@ -52,14 +52,6 @@ export const EmployeeManagement: React.FC<EmployeeManagementProps> = ({
   const [phone, setPhone] = useState<string>('');
   const [pin, setPin] = useState<string>('1234');
 
-  // New Legajo and Personal Fields
-  const [hireDate, setHireDate] = useState<string>('');
-  const [paymentFrequency, setPaymentFrequency] = useState<string>('Mensual');
-  const [dni, setDni] = useState<string>('');
-  const [birthDate, setBirthDate] = useState<string>('');
-  const [residence, setResidence] = useState<string>('');
-  const [profession, setProfession] = useState<string>('');
-
   const [saving, setSaving] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -114,15 +106,6 @@ export const EmployeeManagement: React.FC<EmployeeManagementProps> = ({
     setEmail('');
     setPhone('');
     setPin(String(Math.floor(1000 + Math.random() * 9000)));
-    
-    // Reset legajo fields
-    setHireDate(new Date().toISOString().split('T')[0]);
-    setPaymentFrequency('Mensual');
-    setDni('');
-    setBirthDate('');
-    setResidence('');
-    setProfession('');
-    
     setErrorMsg(null);
   };
 
@@ -143,15 +126,6 @@ export const EmployeeManagement: React.FC<EmployeeManagementProps> = ({
     setEmail(emp.email);
     setPhone(emp.phone);
     setPin(emp.pin);
-    
-    // Load legajo fields
-    setHireDate(emp.hireDate || new Date().toISOString().split('T')[0]);
-    setPaymentFrequency(emp.paymentFrequency || 'Mensual');
-    setDni(emp.dni || '');
-    setBirthDate(emp.birthDate || '');
-    setResidence(emp.residence || '');
-    setProfession(emp.profession || '');
-    
     setErrorMsg(null);
     setShowAddModal(true);
   };
@@ -178,14 +152,6 @@ export const EmployeeManagement: React.FC<EmployeeManagementProps> = ({
         email: email.trim(),
         phone: phone.trim(),
         pin,
-        
-        // Pass legajo fields
-        hireDate,
-        paymentFrequency,
-        dni: dni.trim(),
-        birthDate,
-        residence: residence.trim(),
-        profession: profession.trim(),
       });
 
       setShowAddModal(false);
@@ -312,30 +278,18 @@ export const EmployeeManagement: React.FC<EmployeeManagementProps> = ({
                         className="w-9 h-9 rounded-full object-cover ring-1 ring-slate-200 shrink-0"
                       />
                       <div>
-                        <strong className="text-slate-900 font-bold block text-xs">{emp.name}</strong>
-                        <div className="text-[10px] text-slate-400 font-mono flex flex-wrap gap-x-1.5">
-                          <span>{emp.code}</span>
-                          {emp.dni && <span className="text-slate-500 font-medium">| DNI: {emp.dni}</span>}
-                        </div>
+                        <strong className="text-slate-900 font-bold block">{emp.name}</strong>
+                        <span className="text-[10px] text-slate-400 font-mono">{emp.code}</span>
                       </div>
                     </div>
                   </td>
 
-                  <td className="py-3.5 px-4 text-slate-800">
-                    <strong className="font-semibold block">{emp.role}</strong>
-                    {emp.profession && (
-                      <span className="text-[10px] text-slate-500 block">Prof: {emp.profession}</span>
-                    )}
+                  <td className="py-3.5 px-4 font-medium text-slate-800">
+                    {emp.role}
                   </td>
 
                   <td className="py-3.5 px-4 text-slate-600">
-                    <strong className="font-semibold text-slate-700 block">{emp.branch}</strong>
-                    {(emp.hireDate || emp.paymentFrequency) && (
-                      <div className="text-[10px] text-slate-400 mt-0.5">
-                        {emp.hireDate && <span>Ingreso: {emp.hireDate} </span>}
-                        {emp.paymentFrequency && <span>• Cobro: {emp.paymentFrequency}</span>}
-                      </div>
-                    )}
+                    {emp.branch}
                   </td>
 
                   {/* Device Status & Binding */}
@@ -517,87 +471,6 @@ export const EmployeeManagement: React.FC<EmployeeManagementProps> = ({
                     placeholder="+54 9 11 0000-0000"
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   />
-                </div>
-              </div>
-
-              {/* Sección Legajo y Datos Personales */}
-              <div className="border-t border-slate-200 pt-3 space-y-3">
-                <h4 className="font-extrabold text-slate-800 text-[11px] uppercase tracking-wider">Datos de Legajo e Ingreso</h4>
-                
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Fecha de Ingreso</label>
-                    <input
-                      type="date"
-                      value={hireDate}
-                      onChange={(e) => setHireDate(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Frecuencia de Cobro</label>
-                    <select
-                      value={paymentFrequency}
-                      onChange={(e) => setPaymentFrequency(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                    >
-                      <option value="Mensual">Mensual</option>
-                      <option value="Quincenal">Quincenal</option>
-                      <option value="Semanal">Semanal</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div className="border-t border-slate-200 pt-3 space-y-3">
-                <h4 className="font-extrabold text-slate-800 text-[11px] uppercase tracking-wider">Datos Personales del Legajo</h4>
-                
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">DNI</label>
-                    <input
-                      type="text"
-                      value={dni}
-                      onChange={(e) => setDni(e.target.value)}
-                      placeholder="Ej. 38.123.456"
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Fecha de Nacimiento</label>
-                    <input
-                      type="date"
-                      value={birthDate}
-                      onChange={(e) => setBirthDate(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Profesión</label>
-                    <input
-                      type="text"
-                      value={profession}
-                      onChange={(e) => setProfession(e.target.value)}
-                      placeholder="Ej. Asesor Inmobiliario"
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Lugar de Residencia</label>
-                    <input
-                      type="text"
-                      value={residence}
-                      onChange={(e) => setResidence(e.target.value)}
-                      placeholder="Ej. Av. Santa Fe 1234, CABA"
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                    />
-                  </div>
                 </div>
               </div>
 
