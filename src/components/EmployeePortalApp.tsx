@@ -18,6 +18,7 @@ import {
   ShieldCheck, 
   Smartphone, 
   Building2, 
+  Home,
   Sparkles, 
   ChevronRight, 
   Navigation, 
@@ -38,9 +39,10 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle
+  , Bell
 } from 'lucide-react';
-import { Employee, AttendanceRecord, GeoLocationData, BranchLocation, PaymentRequest } from '../types';
-import { saveEmployee, requestDevicePairing, fetchPaymentRequests, createPaymentRequest } from '../services/api';
+import { Employee, AttendanceRecord, GeoLocationData, BranchLocation, PaymentRequest, AppNotification } from '../types';
+import { saveEmployee, requestDevicePairing, fetchPaymentRequests, createPaymentRequest, fetchNotifications } from '../services/api';
 import { getDeviceDetails } from '../utils/device';
 
 interface EmployeePortalAppProps {
@@ -53,6 +55,7 @@ interface EmployeePortalAppProps {
     location?: GeoLocationData;
     method?: 'QR Cámara' | 'Código PIN' | 'Manual Admin';
     notes?: string;
+    deviceId?: string;
   }) => Promise<{ success: boolean; message: string; record: AttendanceRecord; employee: Employee }>;
   onClockOut: (payload: {
     employeeCodeOrId: string;
@@ -60,18 +63,19 @@ interface EmployeePortalAppProps {
     location?: GeoLocationData;
     method?: 'QR Cámara' | 'Código PIN' | 'Manual Admin';
     notes?: string;
+    deviceId?: string;
   }) => Promise<{ success: boolean; message: string; record: AttendanceRecord; employee: Employee; shiftDurationFormatted: string }>;
   onRefreshData: () => void;
 }
 
-export const EmployeePortalApp: React.FC<EmployeePortalAppProps> = ({
+export const EmployeePortalApp = ({
   employees,
   attendanceRecords,
   branches,
   onClockIn,
   onClockOut,
   onRefreshData,
-}) => {
+}: EmployeePortalAppProps) => {
   // Login State
   const [loggedEmployee, setLoggedEmployee] = useState<Employee | null>(() => {
     return employees.find((e) => e.active) || null;
@@ -123,6 +127,9 @@ export const EmployeePortalApp: React.FC<EmployeePortalAppProps> = ({
   const [requestSuccessMsg, setRequestSuccessMsg] = useState<string | null>(null);
   const [requestErrorMsg, setRequestErrorMsg] = useState<string | null>(null);
   const [selectedReceiptUrl, setSelectedReceiptUrl] = useState<string | null>(null);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [showNotifications, setShowNotifications] = useState<boolean>(false);
+  const [loadingNotifications, setLoadingNotifications] = useState<boolean>(false);
 
   const handleRequestDevicePairing = async () => {
     if (!loggedEmployee) return;
@@ -282,6 +289,18 @@ export const EmployeePortalApp: React.FC<EmployeePortalAppProps> = ({
     }
   };
 
+  const loadNotifications = async () => {
+    if (!loggedEmployee) return;
+    setLoadingNotifications(true);
+    try {
+      setNotifications(await fetchNotifications(loggedEmployee.id));
+    } catch (e) {
+      console.error('Error loading notifications:', e);
+    } finally {
+      setLoadingNotifications(false);
+    }
+  };
+
   const handleSubmitRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!loggedEmployee) return;
@@ -319,6 +338,7 @@ export const EmployeePortalApp: React.FC<EmployeePortalAppProps> = ({
   useEffect(() => {
     if (loggedEmployee) {
       loadRequests();
+      loadNotifications();
     }
   }, [loggedEmployee, activeTab]);
 
@@ -365,6 +385,22 @@ export const EmployeePortalApp: React.FC<EmployeePortalAppProps> = ({
   const myTodayRecords = myRecords.filter((r) => r.dateStr === todayStr);
   const todayEntryRecord = myTodayRecords.find((r) => r.type === 'entry');
   const hasClockedInToday = Boolean(todayEntryRecord);
+  const isCurrentDeviceAuthorized = loggedEmployee?.deviceStatus === 'authorized' && loggedEmployee.deviceId === currentDevice.deviceId;
+  const canScanAttendance = isCurrentDeviceAuthorized && !hasClockedInToday && !lastResult?.success;
+
+  const openAttendanceScanner = () => {
+    if (!isCurrentDeviceAuthorized) {
+      setLastResult({ success: false, message: 'Este celular no está autorizado para registrar la entrada.' });
+      return;
+    }
+
+    if (hasClockedInToday || lastResult?.success) {
+      setLastResult({ success: false, message: 'La entrada de hoy ya fue registrada. No se permite volver a leer el QR.' });
+      return;
+    }
+
+    setShowScannerModal(true);
+  };
 
   // Calculate stats for logged employee
   const totalEntries = myRecords.filter((r) => r.type === 'entry');
@@ -421,7 +457,7 @@ export const EmployeePortalApp: React.FC<EmployeePortalAppProps> = ({
   };
 
   useEffect(() => {
-    if (showScannerModal) {
+    if (showScannerModal && canScanAttendance) {
       startCamera();
     } else {
       stopCamera();
@@ -429,11 +465,19 @@ export const EmployeePortalApp: React.FC<EmployeePortalAppProps> = ({
     return () => {
       stopCamera();
     };
-  }, [showScannerModal, facingMode]);
+  }, [showScannerModal, facingMode, canScanAttendance]);
 
   // Handle scanned QR Code (e.g. from Admin Terminal)
   const handleQrScanned = async (data: string) => {
-    if (isSubmitting || !loggedEmployee) return;
+    if (isSubmitting || !loggedEmployee || !isCurrentDeviceAuthorized || hasClockedInToday || lastResult?.success) {
+      if (!isCurrentDeviceAuthorized) {
+        setLastResult({ success: false, message: 'Este celular no está autorizado para registrar la entrada.' });
+      } else if (hasClockedInToday || lastResult?.success) {
+        setLastResult({ success: false, message: 'La entrada de hoy ya fue registrada. No se permite volver a leer el QR.' });
+      }
+      setShowScannerModal(false);
+      return;
+    }
 
     stopCamera();
     setIsSubmitting(true);
@@ -489,20 +533,23 @@ export const EmployeePortalApp: React.FC<EmployeePortalAppProps> = ({
   // --- VIEW 1: LOGIN SCREEN IF NOT LOGGED IN ---
   if (!loggedEmployee) {
     return (
-      <div className="min-h-screen bg-cyber-grid text-[#dae2fd] flex flex-col justify-center items-center px-4 py-8 relative overflow-hidden">
+      <div className="min-h-screen bg-cyber-grid text-[#dae2fd] flex flex-col justify-center items-center px-3 sm:px-4 py-6 sm:py-8 relative overflow-y-auto overflow-x-hidden">
         {/* Background Radial Glow */}
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-[#4edea3]/10 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="max-w-md w-full glass-pane rounded-3xl p-8 border-t-2 border-[#4edea3]/30 text-center space-y-6 relative z-10">
-          <div className="relative inline-block">
-            <img
-              src="/loguito.png"
-              alt="Logo Inmobiliaria CAMBIOS de aire"
-              className="h-28 sm:h-32 w-auto mx-auto object-contain filter drop-shadow-[0_0_15px_rgba(78,222,163,0.3)]"
-              referrerPolicy="no-referrer"
-            />
-            <span className="absolute -bottom-1 right-0 bg-[#4edea3] text-[#003824] text-[9px] font-mono font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider shadow">
-              Cronos App
+        <div className="max-w-md w-full glass-pane rounded-3xl p-5 sm:p-8 border-t-2 border-[#4edea3]/30 text-center space-y-6 relative z-10">
+          <div className="inline-flex flex-col items-center">
+            <div className="mx-auto flex max-w-xs items-center justify-center gap-3 text-left">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#4edea3] text-[#003824] shadow-lg shadow-[#4edea3]/20">
+                <Building2 className="h-8 w-8" />
+              </div>
+              <div className="font-black leading-tight">
+                <div className="text-sm text-white">Inmobiliaria</div>
+                <div className="text-xl tracking-tight text-[#4edea3]">CAMBIOS <span className="text-white">de aire</span></div>
+              </div>
+            </div>
+            <span className="mt-2 bg-[#4edea3] text-[#003824] text-[9px] font-mono font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider shadow">
+              App Empleado
             </span>
           </div>
 
@@ -588,17 +635,17 @@ export const EmployeePortalApp: React.FC<EmployeePortalAppProps> = ({
 
   // --- VIEW 2: LOGGED-IN MOBILE APP INTERFACE ---
   return (
-    <div className="min-h-screen bg-cyber-grid text-[#dae2fd] pb-32 pt-2 px-3 sm:px-4 relative overflow-x-hidden font-body-md">
+    <div className="min-h-screen bg-cyber-grid text-[#dae2fd] pb-24 sm:pb-32 pt-2 px-2 sm:px-4 relative overflow-x-hidden font-body-md">
       
       {/* Background Decorative Radial Shapes */}
       <div className="absolute top-[-100px] right-[-100px] w-[400px] h-[400px] bg-[radial-gradient(circle,_rgba(78,222,163,0.08)_0%,_transparent_70%)] rounded-full pointer-events-none z-0" />
       <div className="absolute bottom-[100px] left-[-100px] w-[400px] h-[400px] bg-[radial-gradient(circle,_rgba(173,198,255,0.06)_0%,_transparent_70%)] rounded-full pointer-events-none z-0" />
 
-      <div className="max-w-2xl mx-auto space-y-5 relative z-10">
+      <div className="max-w-2xl mx-auto space-y-4 sm:space-y-5 relative z-10">
         
         {/* App Top Header Bar */}
-        <header className="glass-pane rounded-2xl p-4 border-b-2 border-[#4edea3]/30 flex items-center justify-between gap-3 shadow-xl">
-          <div className="flex items-center gap-3">
+        <header className="glass-pane rounded-2xl p-3 sm:p-4 border-b-2 border-[#4edea3]/30 flex items-center justify-between gap-2 sm:gap-3 shadow-xl">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <div
               onClick={handleOpenAvatarModal}
               className="relative cursor-pointer group shrink-0"
@@ -614,22 +661,34 @@ export const EmployeePortalApp: React.FC<EmployeePortalAppProps> = ({
               </span>
             </div>
 
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-white font-extrabold text-sm tracking-tight">Cronos<span className="text-[#4edea3]">Tech</span></span>
-                <span className="bg-[#4edea3]/10 text-[#4edea3] border border-[#4edea3]/20 px-2 py-0.5 rounded text-[9px] font-mono font-bold">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="text-white font-extrabold text-sm tracking-tight">CAMBIOS<span className="text-[#4edea3]"> de aire</span></span>
+                <span className="hidden min-[380px]:inline-block bg-[#4edea3]/10 text-[#4edea3] border border-[#4edea3]/20 px-2 py-0.5 rounded text-[9px] font-mono font-bold shrink-0">
                   {loggedEmployee.code}
                 </span>
               </div>
-              <p className="text-[11px] text-[#bbcabf] font-medium mt-0.5">
+              <p className="text-[10px] sm:text-[11px] text-[#bbcabf] font-medium mt-0.5 truncate max-w-[180px] sm:max-w-none">
                 {loggedEmployee.name} • <span className="text-white font-bold">{loggedEmployee.branch}</span>
               </p>
             </div>
           </div>
 
           <button
+            onClick={() => setShowNotifications(true)}
+            className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-white/5 bg-[#131b2e] text-[#bbcabf] transition hover:bg-[#222a3d] hover:text-[#4edea3] cursor-pointer"
+            title="Notificaciones"
+          >
+            <Bell className="w-4 h-4" />
+            {notifications.length > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#4edea3] px-1 text-[9px] font-black text-[#003824]">
+                {notifications.length > 9 ? '9+' : notifications.length}
+              </span>
+            )}
+          </button>
+          <button
             onClick={handleLogout}
-            className="flex items-center gap-1.5 text-[#bbcabf] hover:text-[#4edea3] bg-[#131b2e] hover:bg-[#222a3d] px-3 py-2 rounded-xl border border-white/5 transition active:scale-95 text-xs font-mono font-bold cursor-pointer"
+            className="flex items-center gap-1.5 text-[#bbcabf] hover:text-[#4edea3] bg-[#131b2e] hover:bg-[#222a3d] px-2 sm:px-3 py-2 rounded-xl border border-white/5 transition active:scale-95 text-xs font-mono font-bold cursor-pointer shrink-0"
             title="Cerrar sesión"
           >
             <LogOut className="w-4 h-4 text-[#4edea3]" />
@@ -637,11 +696,49 @@ export const EmployeePortalApp: React.FC<EmployeePortalAppProps> = ({
           </button>
         </header>
 
+        {showNotifications && (
+          <div className="fixed inset-0 z-[80] flex items-start justify-end bg-[#060e20]/60 p-3 pt-20 backdrop-blur-sm" onClick={() => setShowNotifications(false)}>
+            <section className="glass-pane w-full max-w-sm overflow-hidden rounded-3xl border border-[#4edea3]/20 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+              <div className="flex items-center justify-between border-b border-white/10 bg-[#131b2e] p-4">
+                <div className="flex items-center gap-2">
+                  <Bell className="h-5 w-5 text-[#4edea3]" />
+                  <h2 className="font-bold text-white">Notificaciones</h2>
+                </div>
+                <button onClick={() => setShowNotifications(false)} className="rounded-lg p-1 text-[#bbcabf] hover:text-white cursor-pointer" title="Cerrar">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="max-h-[70vh] space-y-3 overflow-y-auto p-4">
+                {loadingNotifications ? (
+                  <div className="py-8 text-center text-xs text-[#bbcabf]">Cargando notificaciones...</div>
+                ) : notifications.length === 0 ? (
+                  <div className="py-8 text-center text-xs text-[#bbcabf]">
+                    <Bell className="mx-auto mb-2 h-8 w-8 text-[#bbcabf]/40" />
+                    No tienes notificaciones nuevas.
+                  </div>
+                ) : notifications.map((notification) => (
+                  <article key={notification.id} className={`rounded-2xl border p-3 ${
+                    notification.type === 'urgent' ? 'border-rose-400/30 bg-rose-500/10' :
+                    notification.type === 'warning' ? 'border-amber-400/30 bg-amber-500/10' :
+                    notification.type === 'success' ? 'border-[#4edea3]/30 bg-[#4edea3]/10' : 'border-white/10 bg-[#131b2e]'
+                  }`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <h3 className="text-sm font-bold text-white">{notification.title}</h3>
+                      <span className="shrink-0 text-[9px] font-mono text-[#bbcabf]">{new Date(notification.createdAt).toLocaleDateString('es-AR')}</span>
+                    </div>
+                    <p className="mt-1 text-xs leading-relaxed text-[#bbcabf]">{notification.message}</p>
+                  </article>
+                ))}
+              </div>
+            </section>
+          </div>
+        )}
+
         {/* Header Profile & Live Clock Card */}
-        <section className="glass-pane rounded-3xl p-6 space-y-5 border-t-2 border-[#4edea3]/20">
+        <section className="glass-pane rounded-3xl p-4 sm:p-6 space-y-4 sm:space-y-5 border-t-2 border-[#4edea3]/20">
           <div className="flex justify-between items-start flex-wrap gap-3">
             <div className="space-y-1.5">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="bg-[#4edea3]/10 text-[#4edea3] border border-[#4edea3]/20 px-2.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider">
                   PIN {loggedEmployee.pin}
                 </span>
@@ -649,7 +746,7 @@ export const EmployeePortalApp: React.FC<EmployeePortalAppProps> = ({
                   {loggedEmployee.role}
                 </span>
               </div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold text-white leading-tight font-headline-md">
+              <h1 className="text-xl sm:text-3xl font-extrabold text-white leading-tight font-headline-md break-words">
                 {loggedEmployee.name}
               </h1>
               <div className="flex items-center gap-1.5 text-[#bbcabf] text-xs">
@@ -689,60 +786,9 @@ export const EmployeePortalApp: React.FC<EmployeePortalAppProps> = ({
           </div>
         </section>
 
-        {/* Segmented Tab Bar Switch */}
-        <div className="glass-pane p-1.5 rounded-2xl flex items-center justify-between gap-1 border border-white/10">
-          <button
-            onClick={() => setActiveTab('home')}
-            className={`flex-1 py-2.5 px-2 rounded-xl font-mono font-extrabold text-xs flex items-center justify-center gap-2 transition cursor-pointer ${
-              activeTab === 'home'
-                ? 'bg-[#4edea3] text-[#003824] shadow-lg shadow-[#4edea3]/20'
-                : 'text-[#bbcabf] hover:text-white hover:bg-[#222a3d]'
-            }`}
-          >
-            <Zap className="w-4 h-4" />
-            <span>Fichar</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('history')}
-            className={`flex-1 py-2.5 px-2 rounded-xl font-mono font-extrabold text-xs flex items-center justify-center gap-2 transition cursor-pointer ${
-              activeTab === 'history'
-                ? 'bg-[#4edea3] text-[#003824] shadow-lg shadow-[#4edea3]/20'
-                : 'text-[#bbcabf] hover:text-white hover:bg-[#222a3d]'
-            }`}
-          >
-            <History className="w-4 h-4" />
-            <span>Mis Marcas</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('payments')}
-            className={`flex-1 py-2.5 px-2 rounded-xl font-mono font-extrabold text-xs flex items-center justify-center gap-2 transition cursor-pointer ${
-              activeTab === 'payments'
-                ? 'bg-[#4edea3] text-[#003824] shadow-lg shadow-[#4edea3]/20'
-                : 'text-[#bbcabf] hover:text-white hover:bg-[#222a3d]'
-            }`}
-          >
-            <CreditCard className="w-4 h-4" />
-            <span>Pagos</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('profile')}
-            className={`flex-1 py-2.5 px-2 rounded-xl font-mono font-extrabold text-xs flex items-center justify-center gap-2 transition cursor-pointer ${
-              activeTab === 'profile'
-                ? 'bg-[#4edea3] text-[#003824] shadow-lg shadow-[#4edea3]/20'
-                : 'text-[#bbcabf] hover:text-white hover:bg-[#222a3d]'
-            }`}
-          >
-            <User className="w-4 h-4" />
-            <span>Mi Ficha</span>
-          </button>
-        </div>
-
         {/* --- TAB CONTENT 1: FICHAR / INICIO --- */}
         {activeTab === 'home' && (
-          <div className="space-y-4">
+          <div className="space-y-5">
             
             {/* Device Security & Single-Phone Lock Card */}
             {(() => {
@@ -919,15 +965,16 @@ export const EmployeePortalApp: React.FC<EmployeePortalAppProps> = ({
 
               {/* Action Button: Trigger Camera Scanner */}
               <button
-                onClick={() => setShowScannerModal(true)}
-                className="w-full bg-[#4edea3] text-[#003824] font-extrabold px-6 py-4 rounded-2xl flex items-center justify-between group btn-pulse transition-all overflow-hidden relative cursor-pointer active:scale-95 shadow-xl shadow-[#4edea3]/20"
+                onClick={openAttendanceScanner}
+                disabled={!canScanAttendance}
+                className="w-full bg-[#4edea3] text-[#003824] font-extrabold px-6 py-4 rounded-2xl flex items-center justify-between group btn-pulse transition-all overflow-hidden relative cursor-pointer active:scale-95 shadow-xl shadow-[#4edea3]/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
               >
                 <div className="flex items-center gap-3 relative z-10">
                   <Camera className="w-8 h-8 shrink-0 text-[#003824]" />
                   <div className="text-left">
                     <span className="block text-[10px] font-mono opacity-80 mb-0.5">SCANNER AUTENTICADO</span>
                     <span className="font-headline-sm text-base uppercase tracking-tight">
-                      {hasClockedInToday ? 'Reconfirmar Entrada' : 'Escanear QR de Entrada'}
+                      {!isCurrentDeviceAuthorized ? 'Celular no autorizado' : hasClockedInToday ? 'Entrada ya registrada' : 'Escanear QR de Entrada'}
                     </span>
                   </div>
                 </div>
@@ -938,8 +985,8 @@ export const EmployeePortalApp: React.FC<EmployeePortalAppProps> = ({
             {/* Quick Action Grid */}
             <section className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div
-                onClick={() => setShowScannerModal(true)}
-                className="glass-pane p-5 rounded-2xl flex flex-col justify-between group cursor-pointer hover:bg-[#222a3d]/50 transition border border-white/5"
+                onClick={openAttendanceScanner}
+                className={`glass-pane p-5 rounded-2xl flex flex-col justify-between group transition border border-white/5 ${canScanAttendance ? 'cursor-pointer hover:bg-[#222a3d]/50' : 'cursor-not-allowed opacity-60'}`}
               >
                 <div className="w-12 h-12 rounded-xl bg-[#4edea3]/10 border border-[#4edea3]/20 flex items-center justify-center text-[#4edea3] mb-4 group-hover:border-[#4edea3]/40 group-hover:bg-[#4edea3]/20 transition-all">
                   <QrCode className="w-6 h-6" />
@@ -1078,15 +1125,41 @@ export const EmployeePortalApp: React.FC<EmployeePortalAppProps> = ({
 
         {/* --- TAB CONTENT: ADELANTOS Y COMISIONES --- */}
         {activeTab === 'payments' && (
-          <div className="space-y-4">
+          <div className="space-y-5">
+            <section className="flex flex-col gap-2 px-1">
+              <div className="flex items-end justify-between gap-3">
+                <div className="min-w-0">
+                  <span className="text-[10px] font-mono font-bold uppercase tracking-[0.18em] text-[#4edea3]">Dashboard / Solicitudes</span>
+                  <h2 className="mt-1 text-2xl sm:text-3xl font-extrabold tracking-tight text-white">Solicitar Adelanto</h2>
+                </div>
+                <div className="shrink-0 rounded-xl border border-white/5 bg-[#222a3d] px-3 py-1.5 text-right">
+                  <p className="text-[9px] font-mono font-bold uppercase tracking-wider text-[#bbcabf]">Jornada esperada</p>
+                  <p className="text-lg font-bold text-[#4edea3]">{loggedEmployee.expectedStartTime} <span className="text-[10px] font-normal text-[#bbcabf]">HS</span></p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-2 text-xs text-[#bbcabf]">
+                <span>{new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                <span className="flex items-center gap-1 rounded-full border border-[#4edea3]/20 bg-[#4edea3]/10 px-2.5 py-1 text-[9px] font-mono font-bold uppercase text-[#4edea3]"><MapPin className="h-3.5 w-3.5" /> GPS verificado</span>
+              </div>
+            </section>
             {/* Solicitar Adelanto/Comisión Card */}
-            <section className="glass-pane rounded-3xl p-6 border border-white/10 space-y-4">
-              <div>
-                <h3 className="font-headline-sm text-lg font-bold text-white flex items-center gap-2">
-                  <CreditCard className="w-5 h-5 text-[#4edea3]" />
+            <section className="glass-pane rounded-3xl p-4 sm:p-6 border border-white/10 space-y-5 relative overflow-hidden">
+              <div className="absolute -top-12 -right-12 w-36 h-36 bg-[#4edea3]/10 rounded-full blur-3xl pointer-events-none" />
+              <div className="relative flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-[#4edea3]/10 flex items-center justify-center border border-[#4edea3]/20 shrink-0">
+                  <CreditCard className="w-6 h-6 text-[#4edea3]" />
+                </div>
+                <div className="min-w-0">
+                <h3 className="font-headline-sm text-base sm:text-lg font-bold text-white break-words">
                   <span>Solicitar Adelanto o Comisión</span>
                 </h3>
                 <p className="text-xs text-[#bbcabf]">Envíe una solicitud de adelanto de sueldo o cobro de comisión al Administrador</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-wider text-[#4edea3] bg-[#4edea3]/10 border border-[#4edea3]/20 rounded-xl px-3 py-2">
+                <ShieldCheck className="w-4 h-4 shrink-0" />
+                <span>Solicitud segura y vinculada a su legajo</span>
               </div>
 
               {requestSuccessMsg && (
@@ -1103,35 +1176,41 @@ export const EmployeePortalApp: React.FC<EmployeePortalAppProps> = ({
                 </div>
               )}
 
-              <form onSubmit={handleSubmitRequest} className="space-y-4 text-xs">
-                <div className="grid grid-cols-2 gap-4">
+              <form onSubmit={handleSubmitRequest} className="space-y-4 text-xs relative">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[11px] font-mono font-bold text-[#bbcabf] uppercase tracking-wider mb-1.5">
                       Tipo de Solicitud
                     </label>
+                    <div className="relative">
+                      <CreditCard className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#bbcabf] pointer-events-none" />
                     <select
                       value={requestType}
                       onChange={(e) => setRequestType(e.target.value as 'adelanto' | 'comision')}
-                      className="w-full p-3 bg-[#0b1326] border border-white/10 rounded-2xl text-white font-bold focus:ring-2 focus:ring-[#4edea3] focus:outline-none"
+                      className="w-full p-3 pl-10 bg-[#0b1326]/80 border border-white/10 rounded-xl text-white font-bold focus:ring-2 focus:ring-[#4edea3] focus:outline-none"
                     >
                       <option value="adelanto">Adelanto de Sueldo</option>
                       <option value="comision">Cobro de Comisión</option>
                     </select>
+                    </div>
                   </div>
 
                   <div>
                     <label className="block text-[11px] font-mono font-bold text-[#bbcabf] uppercase tracking-wider mb-1.5">
                       Monto (ARS)
                     </label>
+                    <div className="relative">
+                      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#bbcabf] font-mono font-bold">$</span>
                     <input
                       type="number"
                       value={requestAmount}
                       onChange={(e) => setRequestAmount(e.target.value)}
                       placeholder="Ej. 25000"
                       min="1"
-                      className="w-full p-3 bg-[#0b1326] border border-white/10 rounded-2xl text-white font-mono font-bold focus:ring-2 focus:ring-[#4edea3] focus:outline-none"
+                      className="w-full p-3 pl-9 bg-[#0b1326]/80 border border-white/10 rounded-xl text-white font-mono font-bold focus:ring-2 focus:ring-[#4edea3] focus:outline-none"
                       required
                     />
+                    </div>
                   </div>
                 </div>
 
@@ -1144,7 +1223,7 @@ export const EmployeePortalApp: React.FC<EmployeePortalAppProps> = ({
                     onChange={(e) => setRequestReason(e.target.value)}
                     placeholder="Escriba el detalle o motivo (ej: reserva departamento, urgencia médica, etc.)"
                     rows={3}
-                    className="w-full p-3 bg-[#0b1326] border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-[#4edea3] focus:outline-none"
+                    className="w-full p-3 bg-[#0b1326]/80 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-[#4edea3] focus:outline-none resize-none"
                     required
                   />
                 </div>
@@ -1152,7 +1231,7 @@ export const EmployeePortalApp: React.FC<EmployeePortalAppProps> = ({
                 <button
                   type="submit"
                   disabled={isSubmittingRequest}
-                  className="w-full py-3.5 bg-[#4edea3] text-[#003824] font-extrabold text-sm rounded-2xl shadow-lg transition flex items-center justify-center gap-2 hover:bg-[#6ffbbe] cursor-pointer disabled:opacity-50"
+                  className="w-full py-4 bg-gradient-to-r from-[#4edea3] to-emerald-500 text-[#003824] font-extrabold text-sm rounded-full shadow-lg shadow-[#4edea3]/20 transition flex items-center justify-center gap-2 hover:shadow-[#4edea3]/40 cursor-pointer disabled:opacity-50"
                 >
                   {isSubmittingRequest ? (
                     <>
@@ -1170,9 +1249,12 @@ export const EmployeePortalApp: React.FC<EmployeePortalAppProps> = ({
             </section>
 
             {/* Listado de Solicitudes Realizadas */}
-            <section className="glass-pane rounded-3xl p-6 border border-white/10 space-y-4">
-              <div className="flex items-center justify-between pb-2 border-b border-white/10">
-                <h4 className="font-headline-sm text-sm font-bold text-white uppercase tracking-wider">Historial de Solicitudes</h4>
+            <section className="glass-pane rounded-3xl p-4 sm:p-6 border border-white/10 space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                <h4 className="font-headline-sm text-sm font-bold text-white flex items-center gap-2">
+                  <History className="w-5 h-5 text-[#4edea3]" />
+                  <span>Historial de Solicitudes</span>
+                </h4>
                 <button
                   onClick={loadRequests}
                   className="text-[11px] text-[#4edea3] hover:text-[#6ffbbe] flex items-center gap-1 font-mono transition cursor-pointer"
@@ -1197,11 +1279,13 @@ export const EmployeePortalApp: React.FC<EmployeePortalAppProps> = ({
                   {paymentRequests.map((req) => (
                     <div
                       key={req.id}
-                      className="p-4 bg-[#131b2e]/80 rounded-2xl border border-white/5 space-y-3 text-xs"
+                      className={`p-4 bg-[#131b2e]/80 rounded-2xl border border-white/5 border-l-4 space-y-3 text-xs ${
+                        req.status === 'approved' ? 'border-l-[#4edea3]' : req.status === 'rejected' ? 'border-l-rose-400' : 'border-l-[#d0bcff]'
+                      }`}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-2">
-                          <span className={`px-2 py-0.5 rounded font-mono font-bold text-[10px] uppercase ${
+                          <span className={`px-2.5 py-1 rounded-full font-mono font-bold text-[10px] uppercase border ${
                             req.type === 'adelanto' ? 'bg-[#d0bcff]/20 text-[#d0bcff]' : 'bg-[#adc6ff]/20 text-[#adc6ff]'
                           }`}>
                             {req.type === 'adelanto' ? 'Adelanto' : 'Comisión'}
@@ -1211,7 +1295,7 @@ export const EmployeePortalApp: React.FC<EmployeePortalAppProps> = ({
                           </span>
                         </div>
 
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold border ${
                           req.status === 'approved'
                             ? 'bg-[#4edea3]/20 text-[#4edea3]'
                             : req.status === 'rejected'
@@ -1222,13 +1306,14 @@ export const EmployeePortalApp: React.FC<EmployeePortalAppProps> = ({
                         </span>
                       </div>
 
-                      <div className="text-slate-300 text-[11px]">
-                        <strong className="text-white block mb-0.5">Motivo:</strong>
+                      <div className="text-slate-300 text-[11px] space-y-1">
+                        <strong className="text-[#bbcabf]/60 block text-[10px] uppercase tracking-wider">Motivo</strong>
                         {req.reason}
                       </div>
 
-                      <div className="text-[10px] text-[#bbcabf]/50 font-mono">
-                        Solicitado: {new Date(req.requestedAt).toLocaleString('es-AR')}
+                      <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-2 text-[10px] text-[#bbcabf]/60 font-mono">
+                        <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" />{new Date(req.requestedAt).toLocaleString('es-AR')}</span>
+                        <span className={req.status === 'approved' ? 'text-[#4edea3]' : 'text-[#bbcabf]'}>{req.status === 'approved' ? 'Acreditado' : req.status === 'pending' ? 'En revisión' : 'No aprobado'}</span>
                       </div>
 
                       {(req.notes || req.receiptUrl) && (
@@ -1428,7 +1513,7 @@ export const EmployeePortalApp: React.FC<EmployeePortalAppProps> = ({
         {/* Modal Camera Scanner for Employee Smartphone */}
         {showScannerModal && (
           <div className="fixed inset-0 bg-[#060e20]/90 backdrop-blur-xl z-50 flex items-center justify-center p-4">
-            <div className="glass-pane rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border border-[#4edea3]/30 space-y-4">
+            <div className="glass-pane rounded-3xl shadow-2xl max-w-lg w-full max-h-[calc(100dvh-2rem)] overflow-y-auto border border-[#4edea3]/30 space-y-4">
               
               <div className="bg-[#131b2e] text-white p-4 flex items-center justify-between border-b border-white/10">
                 <div className="flex items-center space-x-2">
@@ -1496,38 +1581,39 @@ export const EmployeePortalApp: React.FC<EmployeePortalAppProps> = ({
         )}
 
         {/* Floating Glass Bottom Navigation Bar */}
-        <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[96%] sm:w-[480px] rounded-[2rem] z-[70] glass-pane !bg-[#171f33]/80 !border-white/10 py-2">
-          <div className="flex justify-around items-center h-16 px-2">
+        <nav className="fixed bottom-2 sm:bottom-6 left-1/2 -translate-x-1/2 w-[calc(100%-1rem)] sm:w-[480px] rounded-[2rem] z-[70] glass-pane !bg-[#171f33]/80 !border-white/10 py-1.5 sm:py-2">
+          <div className="flex justify-around items-center h-14 sm:h-16 px-0.5 sm:px-2">
             {/* Fichar (Active / Inactive) */}
             <button
               onClick={() => setActiveTab('home')}
-              className={`flex items-center gap-1.5 rounded-full py-2 px-3 transition-all cursor-pointer ${
+              className={`flex items-center gap-0.5 sm:gap-1.5 rounded-full py-2 px-1 sm:px-3 transition-all cursor-pointer ${
                 activeTab === 'home'
                   ? 'text-[#003824] bg-[#4edea3] font-bold shadow-lg shadow-[#4edea3]/20'
                   : 'text-[#bbcabf]/70 hover:text-white'
               }`}
             >
-              <Zap className="w-4 h-4" />
-              <span className="text-[11px] font-mono font-bold">Fichar</span>
+              <Home className="w-4 h-4" />
+              <span className="hidden min-[380px]:inline text-[11px] font-mono font-bold">Inicio</span>
             </button>
 
             {/* Marcas (Inactive / Active) */}
             <button
               onClick={() => setActiveTab('history')}
-              className={`flex items-center gap-1.5 rounded-full py-2 px-3 transition-all cursor-pointer ${
+              className={`flex items-center gap-0.5 sm:gap-1.5 rounded-full py-2 px-1 sm:px-3 transition-all cursor-pointer ${
                 activeTab === 'history'
                   ? 'text-[#003824] bg-[#4edea3] font-bold shadow-lg shadow-[#4edea3]/20'
                   : 'text-[#bbcabf]/70 hover:text-white'
               }`}
             >
               <History className="w-4 h-4" />
-              <span className="text-[11px] font-mono font-bold">Marcas</span>
+              <span className="hidden min-[380px]:inline text-[11px] font-mono font-bold">Marcas</span>
             </button>
 
             {/* Quick Camera FAB */}
             <button
-              onClick={() => setShowScannerModal(true)}
-              className="bg-[#4edea3] text-[#003824] p-3 rounded-full shadow-lg shadow-[#4edea3]/30 border-2 border-[#0b1326] transition transform hover:scale-110 active:scale-95 cursor-pointer btn-pulse shrink-0"
+              onClick={openAttendanceScanner}
+              disabled={!canScanAttendance}
+              className="bg-[#4edea3] text-[#003824] p-2.5 sm:p-3 rounded-full shadow-lg shadow-[#4edea3]/30 border-2 border-[#0b1326] transition transform hover:scale-110 active:scale-95 cursor-pointer btn-pulse shrink-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
               title="Escanear QR"
             >
               <Camera className="w-5.5 h-5.5" />
@@ -1536,27 +1622,27 @@ export const EmployeePortalApp: React.FC<EmployeePortalAppProps> = ({
             {/* Pagos (Inactive / Active) */}
             <button
               onClick={() => setActiveTab('payments')}
-              className={`flex items-center gap-1.5 rounded-full py-2 px-3 transition-all cursor-pointer ${
+              className={`flex items-center gap-0.5 sm:gap-1.5 rounded-full py-2 px-1 sm:px-3 transition-all cursor-pointer ${
                 activeTab === 'payments'
                   ? 'text-[#003824] bg-[#4edea3] font-bold shadow-lg shadow-[#4edea3]/20'
                   : 'text-[#bbcabf]/70 hover:text-white'
               }`}
             >
               <CreditCard className="w-4 h-4" />
-              <span className="text-[11px] font-mono font-bold">Pagos</span>
+              <span className="hidden min-[380px]:inline text-[11px] font-mono font-bold">Adelantos</span>
             </button>
 
             {/* Perfil (Inactive / Active) */}
             <button
               onClick={() => setActiveTab('profile')}
-              className={`flex items-center gap-1.5 rounded-full py-2 px-3 transition-all cursor-pointer ${
+              className={`flex items-center gap-0.5 sm:gap-1.5 rounded-full py-2 px-1 sm:px-3 transition-all cursor-pointer ${
                 activeTab === 'profile'
                   ? 'text-[#003824] bg-[#4edea3] font-bold shadow-lg shadow-[#4edea3]/20'
                   : 'text-[#bbcabf]/70 hover:text-white'
               }`}
             >
               <User className="w-4 h-4" />
-              <span className="text-[11px] font-mono font-bold">Perfil</span>
+              <span className="hidden min-[380px]:inline text-[11px] font-mono font-bold">Perfil</span>
             </button>
           </div>
         </nav>
@@ -1564,7 +1650,7 @@ export const EmployeePortalApp: React.FC<EmployeePortalAppProps> = ({
         {/* Avatar Change Modal */}
         {showAvatarModal && (
           <div className="fixed inset-0 bg-[#060e20]/90 backdrop-blur-xl z-50 flex items-center justify-center p-4">
-            <div className="glass-pane rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-[#4edea3]/30 space-y-4">
+            <div className="glass-pane rounded-3xl shadow-2xl max-w-md w-full max-h-[calc(100dvh-2rem)] overflow-y-auto border border-[#4edea3]/30 space-y-4">
               
               <div className="bg-[#131b2e] text-white p-4 flex items-center justify-between border-b border-white/10">
                 <div className="flex items-center space-x-2">
@@ -1698,7 +1784,7 @@ export const EmployeePortalApp: React.FC<EmployeePortalAppProps> = ({
         {/* Receipt Viewer Modal */}
         {selectedReceiptUrl && (
           <div className="fixed inset-0 bg-[#060e20]/95 backdrop-blur-xl z-[80] flex items-center justify-center p-4">
-            <div className="glass-pane rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border border-[#4edea3]/30 space-y-4">
+            <div className="glass-pane rounded-3xl shadow-2xl max-w-lg w-full max-h-[calc(100dvh-2rem)] overflow-y-auto border border-[#4edea3]/30 space-y-4">
               
               <div className="bg-[#131b2e] text-white p-4 flex items-center justify-between border-b border-white/10">
                 <div className="flex items-center space-x-2">
@@ -1754,4 +1840,3 @@ export const EmployeePortalApp: React.FC<EmployeePortalAppProps> = ({
     </div>
   );
 };
-

@@ -3,7 +3,7 @@ import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import { INITIAL_EMPLOYEES, INITIAL_BRANCHES, generateInitialAttendanceRecords } from './src/mockData';
-import { Employee, AttendanceRecord, BranchLocation, WeeklyReportSummary, WeeklyEmployeePunctuality, PaymentRequest } from './src/types';
+import { Employee, AttendanceRecord, BranchLocation, WeeklyReportSummary, WeeklyEmployeePunctuality, PaymentRequest, AppNotification } from './src/types';
 
 // In-Memory Database store with pre-populated data
 let employeesStore: Employee[] = [...INITIAL_EMPLOYEES];
@@ -36,6 +36,7 @@ let paymentRequestsStore: PaymentRequest[] = [
     requestedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString()
   }
 ];
+let notificationsStore: AppNotification[] = [];
 
 async function startServer() {
   const app = express();
@@ -660,6 +661,43 @@ Genera un Informe Ejecutivo Breve y Estratégico en español con:
     };
 
     res.json({ success: true, paymentRequest: paymentRequestsStore[idx] });
+  });
+
+  // 7. Employee Notifications API
+  app.get('/api/notifications', (req, res) => {
+    const employeeId = typeof req.query.employeeId === 'string' ? req.query.employeeId : undefined;
+    const list = notificationsStore
+      .filter((notification) => !notification.employeeId || notification.employeeId === employeeId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    res.json(list);
+  });
+
+  app.post('/api/notifications', (req, res) => {
+    const { title, message, type, employeeId } = req.body;
+    if (!title?.trim() || !message?.trim()) {
+      return res.status(400).json({ error: 'Título y mensaje son requeridos' });
+    }
+    if (employeeId && !employeesStore.some((employee) => employee.id === employeeId)) {
+      return res.status(404).json({ error: 'Empleado no encontrado' });
+    }
+
+    const notification: AppNotification = {
+      id: `notification-${Date.now()}`,
+      title: title.trim(),
+      message: message.trim(),
+      type: ['info', 'success', 'warning', 'urgent'].includes(type) ? type : 'info',
+      employeeId: employeeId || undefined,
+      createdAt: new Date().toISOString(),
+    };
+    notificationsStore.unshift(notification);
+    res.status(201).json({ success: true, notification });
+  });
+
+  app.delete('/api/notifications/:id', (req, res) => {
+    const index = notificationsStore.findIndex((notification) => notification.id === req.params.id);
+    if (index === -1) return res.status(404).json({ error: 'Notificación no encontrada' });
+    notificationsStore.splice(index, 1);
+    res.json({ success: true });
   });
 
   // Vite Middleware integration for dev or Static Files for prod

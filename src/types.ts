@@ -56,6 +56,15 @@ export interface PaymentRequest {
   notes?: string;
 }
 
+export interface AppNotification {
+  id: string;
+  title: string;
+  message: string;
+  type: 'info' | 'success' | 'warning' | 'urgent';
+  employeeId?: string;
+  createdAt: string;
+}
+
 export type AttendanceType = 'entry' | 'exit';
 
 export interface GeoLocationData {
