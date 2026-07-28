@@ -785,6 +785,7 @@ export const EmployeePortalApp = ({
             </div>
           </div>
         </section>
+        
 
         {/* --- TAB CONTENT 1: FICHAR / INICIO --- */}
         {activeTab === 'home' && (
